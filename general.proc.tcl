@@ -143,7 +143,7 @@ namespace eval Examples {
         set L3 [ $port Layer3.IPv6.Set ]
         $L3 Ip.Manual.Add $ipAddress
         if { ![string equal $gateway "null"] } {
-            #$L3 Gateway.Set $gateway
+            $L3 Gateway.Manual.Set $gateway
         }
         return $L3
     }
