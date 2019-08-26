@@ -42,15 +42,16 @@ set dstUdpPort1 2002
 
 # --- Timing configuration
 #   - Number of frames to send
-set numberOfFrames 10000
+set numberOfFrames 1000000
 #   - Time between two frames
-set interFrameGap 1ms
+set interFrameGapInNs 10000
 
 # ---- Traffic direction configuration
 # set to 1 for bidirectional traffic
-set bidir 1
+set bidir 0
+
 # --- Output of the intermediate results in a CSV file 
 # You can choose to use the standard output like this:
 #set outputChannel stdout;
 # Or you can choose to use a file
-set outputChannel [open "/tmp/result.csv" "w"];
+set outputChannel [open "result.csv" "w"];

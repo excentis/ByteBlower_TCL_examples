@@ -11,7 +11,6 @@
 #
 # Such files can then be imported in your favorite spreadsheet program to create graphs, ....
 #
-##
 
 source [ file join [ file dirname [ info script ]] .. general.proc.tcl ]
 
@@ -22,8 +21,8 @@ source [ file join [ file dirname [ info script ]] .. general.proc.tcl ]
 # This is a global integer we use to detect where we are.
 set ::RT.CSV.CallBack.interval 0;
 set ::RT.CSV.Std.Header "timestamp,interval"
-set ::RT.CSV.TX.Header ",# Frames (TX)"
-set ::RT.CSV.RX.Header ",# Frames (RX),Rate kbps (RX),Rate Mbps (RX)"
+set ::RT.CSV.TX.Header ",# TX Frames"
+set ::RT.CSV.RX.Header ",# RX Frames, Total Average RX Rate (bps), Total Average RX Rate (Mbps)"
 
 set ::RT.CSV.CallBack.channel $outputChannel
 
@@ -33,38 +32,45 @@ proc ::RT.CSV.RX2CSV { rx } {
     ##
     set NrOfFrames 0
     set NrOfOctets 0
-    set TriggerRate 0
     set bps 0
+	set Mbps 0
     foreach { type value }  $rx {
-        switch -- $type {
-            NrOfFrames -
-            NrOfOctets -
-            TriggerRate {
-            set $type $value
-            }
-        }
-        }
-        if { $NrOfFrames != 0 } {
+		switch -- $type {
+			NrOfFrames -
+			NrOfOctets {
+			set $type $value
+			}
+		}
+	}
+	if { $NrOfFrames != 0 } {
         # This is not always accurate, but in most situations a very adequate
         # way of calculating the realtime speed.
         # Not good in sitations like growing size flows.
         # In the future, ByteBlower will return the TriggerOctetRate, which can be used
         # directly.
         ##
-        set bps [ expr ceil ( $TriggerRate *( $NrOfOctets * 8.0 / $NrOfFrames) ) ]
+				
+		#puts "NrOfFrames = $NrOfFrames"
+		#puts "NrOfOctets = $NrOfOctets"
+		#puts "Interval  = ${::RT.CSV.CallBack.interval}"
+        #set bps [ expr ceil ( $TriggerRate *( $NrOfOctets * 8.0 / $NrOfFrames) ) ]
+		set seconds [expr ${::RT.CSV.CallBack.interval} + 1]
+		set bps [expr $NrOfFrames * (${::ethernetLength} + 4) * 8.0 / $seconds]
+		set Mbps [ expr double( $bps / 1000000.0 ) ]
+        puts "**** Average Bitrate : $bps bps"
     }
-    return ", $NrOfFrames, [expr int( $bps / 1000 )], [ expr int( $bps / 1000000 ) ]"
+    return ", $NrOfFrames, $bps, [format "%.2f" $Mbps]"
 }
 
 proc ::RT.CSV.TX2CSV { tx } {
     set NrOfFramesSent 0;
     foreach { type value }  $tx {
-    switch -- $type {
-        NrOfFramesSent
-        {
-        set $type $value
-        }
-    }
+		switch -- $type {
+			NrOfFramesSent
+			{
+			set $type $value
+			}
+		}
     }
     return ", $NrOfFramesSent"
 }
@@ -74,15 +80,17 @@ proc ::RT.CSV.CallBack { result } {
         set headerString ${::RT.CSV.Std.Header}
         set resultString "[clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}],${::RT.CSV.CallBack.interval}";
         foreach item $result {
+	        puts "************* $item"
             append headerString ","
             append resultString ","
             foreach { type value } $item {
                 switch -- $type {
                     -rx {
+	                    #puts "*********** $value"
                         append resultString [ ::RT.CSV.RX2CSV $value ]
                         append headerString ${::RT.CSV.RX.Header}
                     }
-                    -tx {
+                    -tx {	                   
                         append resultString [ ::RT.CSV.TX2CSV $value ]
                         append headerString ${::RT.CSV.TX.Header}
                     }
@@ -104,6 +112,33 @@ proc ::RT.CSV.CallBack { result } {
         puts stderr "$::errorInfo"
     }
 }
+
+proc ::RT.CSV.ParseFinalResult { result } {
+    if { [ catch {
+        set resultString "[clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}],${::RT.CSV.CallBack.interval}";
+        foreach item $result {
+            foreach { type value } $item {
+                switch -- $type {
+                    -rx {
+                        append resultString [ ::RT.CSV.RX2CSV $value ]
+                    }
+                    -tx {	                   
+                        append resultString [ ::RT.CSV.TX2CSV $value ]
+                    }
+                    default {
+                        puts stderr "Unknown item in result : $type"
+                    }
+                }
+            }
+        }
+        #puts "$resultString"
+
+    } errorString ] } {
+        puts stderr "ParseFinalResult failed : $errorString"
+        puts stderr "$::errorInfo"
+    }
+}
+
 
 if { $srcPerformDhcp1 == 1 } {
     set srcIpConfig dhcpv4
@@ -134,13 +169,27 @@ puts "Destination port:"
 puts [$dstPort Description.Get]
 
 puts "Resolving addresses."
+set interFrameGap "$interFrameGapInNs"
+append interFrameGap "ns"
 set flows [list [ excentis::ByteBlower::Examples::Setup.Flow.IPv4.UDP $srcPort $dstPort $ethernetLength $srcUdpPort1 $dstUdpPort1 $numberOfFrames $interFrameGap] ]
 if { $bidir == 1 } {
     lappend flows [ excentis::ByteBlower::Examples::Setup.Flow.IPv4.UDP $dstPort $srcPort $ethernetLength $srcUdpPort1 $dstUdpPort1 $numberOfFrames $interFrameGap ]
 }
+
 puts "Configured all flows. We will start the test now."
-set ::RT.CSV.CallBack.interval 0;
+set ::RT.CSV.CallBack.interval 0
 set result [ ::excentis::ByteBlower::ExecuteScenarioRT $flows -extended -callback ::RT.CSV.CallBack ]
 
-$server Destructor
+puts " ***** FINAL RESULT : "
+#puts $result
+# set the interval to the time when the last packets were expected to be received :
+set nsPerSecond 1000000000;
+set endInterval [expr ($numberOfFrames * $interFrameGapInNs / $nsPerSecond) - 1]
+#puts "LAST INTERVAL = $endInterval"
+set ::RT.CSV.CallBack.interval $endInterval
+::RT.CSV.ParseFinalResult $result
 
+# Cleanup :
+$server Destructor
+close ${::RT.CSV.CallBack.channel}
+puts "Test Finished"
