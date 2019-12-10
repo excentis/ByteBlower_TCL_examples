@@ -16,6 +16,7 @@ This repository contains all public available TCL examples on how to use the Byt
 - tcp: Advanced TCP usage: ack-suppression test, influence of MTU on TCP etc
 - telnet: Simple example on how to use the Telnet protocol
 - vlan: Examples on how to use VLANs on the ByteBlower Port
+- wireless-endpoint: Examples on how to use the Wireless Endpoint to collect information
 
 ## Dependencies
 - ByteBlower TCL API : http://setup.byteblower.com/software.html#API
