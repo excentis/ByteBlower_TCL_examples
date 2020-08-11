@@ -87,8 +87,8 @@ proc TCP.multisession.Setup { } {
                 $httpClient ReceiveWindow.Scaling.Enable 1
                 $httpClient ReceiveWindow.Scaling.Value.Set $::windowScale
             }
-            
-        
+
+
             # --- Setting Congestion Avoidance Algorithm
             if { [ info exists ::caa ] } {
                 $httpClient Tcp.CongestionAvoidance.Algorithm.Set $::caa
@@ -98,7 +98,7 @@ proc TCP.multisession.Setup { } {
             $httpClient Request.Start.Type.Set "scheduled"
 
             if { [ info exists ::timeOffset ] } {
-                # Using convertToInt and double() instead of pure integer 
+                # Using convertToInt and double() instead of pure integer
                 # calculations because on 32-bit systems the initialTimeToWait
                 # will easily rollover and the ByteBlower API does not accept
                 # doubles
@@ -212,9 +212,19 @@ proc TCP.multisession.Run { httpServer httpClientPort } {
 
             puts "Waiting for HTTP Client ${httpClientNr}"
 
+            # Calculate the maximum total duration. This will be used for the timeout check.
+            set request_duration [ expr [ $httpClient Request.Duration.Get ] / 1000000000.0 ]
+            set initial_time_to_wait [ expr [ $httpClient Request.InitialTimeToWait.Get ] / 1000000000.0 ]
+            set total_duration [ expr $request_duration + $initial_time_to_wait ]
+
             set i 0
             while { ![ $httpClient Finished.Get ] } {
                 incr i 1
+
+                # Allow maximum 10 seconds of overtime.
+                if { $i + 10 >= $total_duration } {
+                    error "HTTP request timed out."
+                }
 
                 # --- Wait a second
                 set wait 0
@@ -243,10 +253,10 @@ proc TCP.multisession.Run { httpServer httpClientPort } {
         #- Stop the HTTP stop
         $httpServer Stop
 
-		#- Wait an additional second or two
-		set wait 0
-		after 2000 "set wait 1"
-		vwait wait
+        #- Wait an additional second or two
+        set wait 0
+        after 2000 "set wait 1"
+        vwait wait
 
         #- Get the HTTP Client status information
         set httpClientNr 0
@@ -299,7 +309,7 @@ proc TCP.multisession.Run { httpServer httpClientPort } {
                 set txBytes [ $txHttpResultSnapshot Tx.ByteCount.Total.Get ]
 
                 set avgThroughput [ expr 8 * [ $rxHttpResultSnapshot AverageDataSpeed.Get ] ]
-                
+
                 set tcpTxResultSnapshot [ [ $txHttpSessionInfo Tcp.Session.Info.Get ] Result.Get ]
                 $tcpTxResultSnapshot Refresh
 
@@ -351,7 +361,7 @@ proc parseTime { timeValue } {
     if { [regexp -line {^([0-9][0-9]*)$} $timeValue match number] } {
         return $number
     } elseif { [regexp -line {^([0-9][0-9]*)s$} $timeValue match number] } {
-        # Using convertToInt instead of int() because on 32-bit systems the 
+        # Using convertToInt instead of int() because on 32-bit systems the
         # return value will easily rollover
         return [ convertToInt [ expr double($number) * 1000000000] ]
     } else {
@@ -360,11 +370,11 @@ proc parseTime { timeValue } {
 }
 
 proc convertToInt { timeValue } {
-    # Hack to work around 32-bit systems.  
+    # Hack to work around 32-bit systems.
     if { [ regexp -line {^([0-9][0-9]*)\..*$} $timeValue match number ] } {
         return $number
     }
-    
+
     return $timeValue
 }
 
