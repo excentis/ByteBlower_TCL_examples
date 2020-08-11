@@ -222,7 +222,7 @@ proc TCP.multisession.Run { httpServer httpClientPort } {
                 incr i 1
 
                 # Allow maximum 10 seconds of overtime.
-                if { $i + 10 >= $total_duration } {
+                if { $i >= $total_duration + 10 } {
                     error "HTTP request timed out."
                 }
 
